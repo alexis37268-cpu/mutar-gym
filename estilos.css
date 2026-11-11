@@ -186,6 +186,8 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
 .mini-ejs li { display: flex; align-items: center; gap: .65rem; font-size: .95rem; }
 .mini-ejs small { color: var(--goma); }
 .par { display: flex; gap: 2px; background: #fff; overflow: hidden; box-sizing: border-box; }
+.par img.foto { object-fit: cover; border-radius: 6px; }
+.marca-foto { background: #ECEEEA; border-radius: 4px; padding: 0 .3rem; }
 .par img { flex: 1 1 0; min-width: 0; min-height: 0; width: 0; height: 100%; object-fit: contain; display: block; }
 .mini { width: 84px; height: 48px; flex: none; border-radius: 8px; background: #fff; border: 1px solid var(--linea); display: flex; padding: 2px; }
 
@@ -224,6 +226,7 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
   .imp-ej { break-inside: avoid; border: 1px solid #bbb; border-radius: 3mm; padding: 3mm; display: grid; gap: 1.5mm; font-size: 12pt; }
   .imp-ej .par { width: 100%; height: 62mm; }
   .imp-sin-foto { width: 100%; height: 62mm; border-radius: 2mm; }
+  .imp-ej img.foto { filter: grayscale(1) contrast(1.1) brightness(1.08); object-fit: contain; }
   .imp-pie { margin-top: 6mm; font-size: 7pt; color: #666; }
   .imp-sin-foto { background: #eee; }
   .imp-ej span { font-family: var(--titulos); font-size: 16pt; font-weight: 700; }

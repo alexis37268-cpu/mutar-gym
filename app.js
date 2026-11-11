@@ -306,7 +306,11 @@ async function catalogo() {
   return CATALOGO;
 }
 // Dibujo de líneas en dos posiciones (inicio y fin), uno al lado del otro
-const dibujoEj = ref => `<img src="ejercicios/img/${encodeURIComponent(ref)}-1.svg" alt="" loading="lazy"><img src="ejercicios/img/${encodeURIComponent(ref)}-2.svg" alt="" loading="lazy">`;
+// Las refs de ejercicios con FOTO empiezan con "f:" (ej: "f:Barbell_Squat"); las de dibujo no.
+const dibujoEj = ref => ref.startsWith("f:")
+  ? `<img class="foto" src="ejercicios/fotos/${encodeURIComponent(ref.slice(2))}.jpg" alt="" loading="lazy">`
+  : `<img src="ejercicios/img/${encodeURIComponent(ref)}-1.svg" alt="" loading="lazy"><img src="ejercicios/img/${encodeURIComponent(ref)}-2.svg" alt="" loading="lazy">`;
+const refDe = e => e.t === "f" ? "f:" + e.id : e.id;
 const fotoEj = (ref, clase) => ref
   ? `<span class="par ${clase}">${dibujoEj(ref)}</span>`
   : `<span class="${clase} sin-foto" aria-hidden="true"></span>`;
@@ -401,9 +405,9 @@ async function elegirEjercicios(r, s, ejs, nombreRutina) {
       .sort((a, b) => a[1] - b[1] || (b[0].p || 0) - (a[0].p || 0)).map(x => x[0]).slice(0, 120);
     $("#grilla").innerHTML = res.length ? res.map(e => `
       <button type="button" class="tarjeta-ej" data-id="${esc(e.id)}">
-        <span class="par">${dibujoEj(e.id)}</span>
+        <span class="par">${dibujoEj(refDe(e))}</span>
         <span class="nombre">${esc(e.n)}</span>
-        <span class="sub">${esc(e.e)}</span>
+        <span class="sub">${esc(e.e)}${e.t === "f" ? ` · <span class="marca-foto">foto</span>` : ""}</span>
       </button>`).join("") : `<p class="vacio">No hay ejercicios con esa búsqueda.</p>`;
   };
   $("#q").addEventListener("input", pintar);
@@ -413,7 +417,7 @@ async function elegirEjercicios(r, s, ejs, nombreRutina) {
   $("#grilla").addEventListener("click", e => {
     const t = e.target.closest("[data-id]"); if (!t) return;
     const ej = POR_ID[t.dataset.id];
-    ejs.push({ ejercicio: ej.n, series: 3, repeticiones: "12", peso: "", ejercicio_ref: ej.id });
+    ejs.push({ ejercicio: ej.n, series: 3, repeticiones: "12", peso: "", ejercicio_ref: refDe(ej) });
     sumados++; $("#cuenta").textContent = sumados;
     t.classList.add("sumado"); setTimeout(() => t.classList.remove("sumado"), 600);
   });
