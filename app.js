@@ -183,13 +183,19 @@ async function fichaSocio(s) {
       ${s.notas ? `<dt>Notas</dt><dd>${esc(s.notas)}</dd>` : ""}
     </dl>
     <section class="seccion">
-      <div class="seccion-cab"><h3>Rutinas</h3><button class="btn chico" id="nueva-rutina">Nueva rutina</button></div>
+      <div class="seccion-cab"><h3>Rutinas</h3>
+        <div class="acciones">
+          ${rutinas.length ? `<button class="btn chico" id="imprimir-todas">Imprimir todas</button>` : ""}
+          <button class="btn chico" id="nueva-rutina">Nueva rutina</button>
+        </div></div>
       ${rutinas.length ? rutinas.map(r => `
         <div class="rutina">
-          <div class="seccion-cab"><strong>${esc(r.nombre)}</strong><button class="btn chico" data-rutina="${r.id}">Editar</button></div>
-          <table class="ejercicios"><tbody>${r.ejercicios.map(e => `
-            <tr><td>${esc(e.ejercicio)}</td><td>${e.series ? esc(e.series) + " × " + esc(e.repeticiones) : esc(e.repeticiones)}</td><td>${esc(e.peso)}</td></tr>`).join("")}
-          </tbody></table>
+          <div class="seccion-cab"><strong>${esc(r.nombre)}</strong>
+            <div class="acciones"><button class="btn chico" data-imprimir="${r.id}">Imprimir</button>
+              <button class="btn chico" data-rutina="${r.id}">Editar</button></div></div>
+          <ul class="mini-ejs">${r.ejercicios.map(e => `
+            <li>${fotoEj(e.ejercicio_ref, "mini")}<span>${esc(e.ejercicio)}<br><small>${detalleEj(e)}</small></span></li>`).join("")}
+          </ul>
         </div>`).join("") : `<p class="vacio">Sin rutina cargada.</p>`}
     </section>`);
   $("#cobrar").onclick = () => formPago(s);
@@ -197,6 +203,9 @@ async function fichaSocio(s) {
   $("#nueva-rutina").onclick = () => formRutina({ socio_id: s.id, nombre: "", ejercicios: [] }, s);
   dlgCuerpo.querySelectorAll("[data-rutina]").forEach(b =>
     b.onclick = () => formRutina(structuredClone(rutinas.find(r => r.id === Number(b.dataset.rutina))), s));
+  dlgCuerpo.querySelectorAll("[data-imprimir]").forEach(b =>
+    b.onclick = () => imprimirRutinas(s, rutinas.filter(r => r.id === Number(b.dataset.imprimir))));
+  if (rutinas.length) $("#imprimir-todas").onclick = () => imprimirRutinas(s, rutinas);
 }
 
 async function formSocio(s = { activo: true }) {
@@ -287,28 +296,70 @@ async function formPago(s) {
   };
 }
 
-function formRutina(r, s) {
-  const filaEj = (e = {}) => `
-    <div class="ej-fila">
-      <input placeholder="Ejercicio" value="${esc(e.ejercicio)}" aria-label="Ejercicio">
-      <input placeholder="Series" inputmode="numeric" value="${esc(e.series)}" aria-label="Series">
-      <input placeholder="Reps" value="${esc(e.repeticiones)}" aria-label="Repeticiones">
-      <input placeholder="Peso" value="${esc(e.peso)}" aria-label="Peso">
-      <button type="button" class="btn chico" data-quitar aria-label="Quitar ejercicio">×</button>
-    </div>`;
+// ---------- catálogo de ejercicios (archivos fijos de la web) ----------
+let CATALOGO = null, POR_ID = {};
+async function catalogo() {
+  if (!CATALOGO) {
+    CATALOGO = await fetch("ejercicios/catalogo.json").then(r => r.json());
+    CATALOGO.forEach(e => { POR_ID[e.id] = e; });
+  }
+  return CATALOGO;
+}
+const fotoEj = (ref, clase) => ref
+  ? `<img class="${clase}" src="ejercicios/img/${encodeURIComponent(ref)}.jpg" alt="" loading="lazy">`
+  : `<span class="${clase} sin-foto" aria-hidden="true"></span>`;
+const detalleEj = e => [e.series ? `${e.series} × ${e.repeticiones || "–"}` : e.repeticiones, e.peso].filter(Boolean).map(esc).join(" · ");
+
+async function formRutina(r, s) {
+  await catalogo();
+  const ejs = r.ejercicios.map(e => ({ ...e }));
   abrir(`
     <div class="dlg-cab"><h2>Rutina de ${esc(s.nombre)}</h2>
       <button class="btn chico cerrar" data-cerrar type="button">Cancelar</button></div>
     <form id="f">
       <div class="campo"><label for="rn">Nombre</label><input id="rn" required placeholder="Día A – Pecho y tríceps" value="${esc(r.nombre)}"></div>
-      <div id="ejs" class="seccion">${(r.ejercicios.length ? r.ejercicios : [{}, {}, {}]).map(filaEj).join("")}</div>
-      <div class="acciones"><button type="button" class="btn" id="mas">Agregar ejercicio</button>
-        ${r.id ? `<button type="button" class="btn peligro" id="borrar">Borrar rutina</button>` : ""}</div>
+      <ul id="ejs" class="ej-lista"></ul>
+      <div class="acciones">
+        <button type="button" class="btn" id="elegir">Elegir del catálogo</button>
+        <button type="button" class="btn" id="manual">Escribir uno a mano</button>
+        ${r.id ? `<button type="button" class="btn peligro" id="borrar">Borrar rutina</button>` : ""}
+      </div>
       <button class="btn primario">Guardar rutina</button>
     </form>`);
-  const ejs = $("#ejs");
-  ejs.addEventListener("click", e => { if (e.target.closest("[data-quitar]")) e.target.closest(".ej-fila").remove(); });
-  $("#mas").onclick = () => { ejs.insertAdjacentHTML("beforeend", filaEj()); ejs.lastElementChild.querySelector("input").focus(); };
+
+  const lista = $("#ejs");
+  const pintar = () => {
+    lista.innerHTML = ejs.length ? ejs.map((e, i) => `
+      <li class="ej-item" data-i="${i}">
+        ${fotoEj(e.ejercicio_ref, "ej-foto")}
+        <div class="ej-datos">
+          <input data-k="ejercicio" value="${esc(e.ejercicio)}" aria-label="Ejercicio" placeholder="Ejercicio">
+          <div class="ej-nums">
+            <input data-k="series" inputmode="numeric" value="${esc(e.series)}" placeholder="Series" aria-label="Series">
+            <input data-k="repeticiones" value="${esc(e.repeticiones)}" placeholder="Reps" aria-label="Repeticiones">
+            <input data-k="peso" value="${esc(e.peso)}" placeholder="Peso" aria-label="Peso">
+          </div>
+        </div>
+        <div class="ej-mover">
+          <button type="button" class="btn chico" data-subir aria-label="Subir">↑</button>
+          <button type="button" class="btn chico" data-quitar aria-label="Quitar">×</button>
+        </div>
+      </li>`).join("") : `<li class="vacio">Tocá «Elegir del catálogo» para sumar ejercicios con foto.</li>`;
+  };
+  lista.addEventListener("input", e => {
+    const li = e.target.closest("[data-i]"); if (!li) return;
+    const k = e.target.dataset.k; ejs[li.dataset.i][k] = k === "series" ? (e.target.value ? Number(e.target.value) : null) : e.target.value;
+  });
+  lista.addEventListener("click", e => {
+    const li = e.target.closest("[data-i]"); if (!li) return;
+    const i = Number(li.dataset.i);
+    if (e.target.closest("[data-quitar]")) { ejs.splice(i, 1); pintar(); }
+    if (e.target.closest("[data-subir]") && i > 0) { [ejs[i - 1], ejs[i]] = [ejs[i], ejs[i - 1]]; pintar(); }
+  });
+  pintar();
+
+  $("#manual").onclick = () => { ejs.push({ ejercicio: "", series: 3, repeticiones: "12", peso: "" }); pintar(); lista.lastElementChild.querySelector("input").focus(); };
+  $("#elegir").onclick = () => elegirEjercicios(r, s, ejs, $("#rn").value);
   if (r.id) $("#borrar").onclick = async () => {
     if (!confirm("¿Borrar esta rutina?")) return;
     await datos.borrarRutina(r.id); aviso("Rutina borrada"); fichaSocio(s);
@@ -316,13 +367,82 @@ function formRutina(r, s) {
   $("#f").onsubmit = async e => {
     e.preventDefault();
     r.nombre = $("#rn").value.trim();
-    r.ejercicios = [...ejs.querySelectorAll(".ej-fila")].map(f => {
-      const [ej, se, re, pe] = [...f.querySelectorAll("input")].map(i => i.value.trim());
-      return { ejercicio: ej, series: se ? Number(se) : null, repeticiones: re, peso: pe };
-    }).filter(x => x.ejercicio);
+    r.ejercicios = ejs.filter(x => (x.ejercicio || "").trim()).map(({ ejercicio, series, repeticiones, peso, ejercicio_ref }) =>
+      ({ ejercicio: ejercicio.trim(), series, repeticiones, peso, ejercicio_ref: ejercicio_ref || null }));
     try { await datos.guardarRutina(r); aviso("Rutina guardada"); fichaSocio(s); }
     catch (err) { aviso(err.message); }
   };
+}
+
+// Grilla de fotos para elegir ejercicios (se pueden tocar varios seguidos)
+async function elegirEjercicios(r, s, ejs, nombreRutina) {
+  const cat = await catalogo();
+  const grupos = ["Todos", ...new Set(cat.map(e => e.g))];
+  let grupo = "Todos";
+  abrir(`
+    <div class="dlg-cab"><h2>Elegir ejercicios</h2>
+      <button class="btn primario chico cerrar" id="listo" type="button">Listo (<span id="cuenta">0</span>)</button></div>
+    <input type="search" id="q" placeholder="Buscar: sentadilla, curl, press, bíceps…" aria-label="Buscar ejercicio">
+    <div class="filtros" role="group" aria-label="Grupo muscular">
+      ${grupos.map(g => `<button type="button" data-g="${esc(g)}" aria-pressed="${g === grupo}">${esc(g)}</button>`).join("")}
+    </div>
+    <div id="grilla" class="grilla-ej"></div>`);
+  let sumados = 0;
+  const norm = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const pintar = () => {
+    const q = norm($("#q").value.trim());
+    const res = cat.filter(e => (grupo === "Todos" || e.g === grupo) &&
+      (!q || norm(`${e.n} ${e.en} ${e.m.join(" ")} ${e.e}`).includes(q)))
+      // primero los que EMPIEZAN con lo buscado, después los que lo tienen en el nombre, después el resto
+      .map(e => [e, !q ? 0 : norm(e.n).startsWith(q) ? 0 : norm(e.n).includes(q) ? 1 : norm(e.en).includes(q) ? 2 : 3])
+      .sort((a, b) => a[1] - b[1] || (b[0].p || 0) - (a[0].p || 0)).map(x => x[0]).slice(0, 120);
+    $("#grilla").innerHTML = res.length ? res.map(e => `
+      <button type="button" class="tarjeta-ej" data-id="${esc(e.id)}">
+        <img src="ejercicios/img/${encodeURIComponent(e.id)}.jpg" alt="" loading="lazy">
+        <span class="nombre">${esc(e.n)}</span>
+        <span class="sub">${esc(e.e)}</span>
+      </button>`).join("") : `<p class="vacio">No hay ejercicios con esa búsqueda.</p>`;
+  };
+  $("#q").addEventListener("input", pintar);
+  dlgCuerpo.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+    grupo = b.dataset.g; dlgCuerpo.querySelectorAll("[data-g]").forEach(x => x.setAttribute("aria-pressed", x === b)); pintar();
+  });
+  $("#grilla").addEventListener("click", e => {
+    const t = e.target.closest("[data-id]"); if (!t) return;
+    const ej = POR_ID[t.dataset.id];
+    ejs.push({ ejercicio: ej.n, series: 3, repeticiones: "12", peso: "", ejercicio_ref: ej.id });
+    sumados++; $("#cuenta").textContent = sumados;
+    t.classList.add("sumado"); setTimeout(() => t.classList.remove("sumado"), 600);
+  });
+  $("#listo").onclick = () => formRutina({ ...r, nombre: nombreRutina, ejercicios: ejs }, s);
+  pintar();
+}
+
+// ---------- impresión (impresora o "Guardar como PDF") ----------
+async function imprimirRutinas(s, rutinas) {
+  const fecha = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+  let hoja = document.getElementById("impresion");
+  if (!hoja) { hoja = document.createElement("div"); hoja.id = "impresion"; document.body.appendChild(hoja); }
+  hoja.innerHTML = `
+    <header class="imp-cab">
+      <img src="${esc(CFG.gym.logo_url || "logo-192.png")}" alt="">
+      <div><h1>${esc(s.nombre)} ${esc(s.apellido)}</h1><p>${esc(CFG.gym.nombre)} · ${fecha}</p></div>
+    </header>
+    ${rutinas.map(r => `
+      <section class="imp-rutina">
+        <h2>${esc(r.nombre)}</h2>
+        <div class="imp-grilla">${r.ejercicios.map((e, i) => `
+          <div class="imp-ej">
+            ${e.ejercicio_ref ? `<img src="ejercicios/img/${encodeURIComponent(e.ejercicio_ref)}.jpg" alt="">` : `<div class="imp-sin-foto"></div>`}
+            <strong>${i + 1}. ${esc(e.ejercicio)}</strong>
+            <span>${detalleEj(e) || "&nbsp;"}</span>
+          </div>`).join("")}
+        </div>
+      </section>`).join("")}`;
+  // esperar a que carguen las fotos antes de imprimir
+  await Promise.all([...hoja.querySelectorAll("img")].map(i => i.complete ? null : new Promise(ok => { i.onload = i.onerror = ok; })));
+  if (window.Android && window.Android.imprimir) window.Android.imprimir();   // dentro de la APK
+  else window.print();
 }
 
 // =====================================================================

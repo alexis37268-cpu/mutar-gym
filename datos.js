@@ -33,7 +33,7 @@ export function estadoSocio(s, diasAviso) {
 // =====================================================================
 // MODO PRUEBA: todo en localStorage del navegador
 // =====================================================================
-const CLAVE = "gimnasio-demo-v2";
+const CLAVE = "gimnasio-demo-v3";
 
 function semilla() {
   const h = hoy();
@@ -85,10 +85,10 @@ function semilla() {
   db.caja.push({ id: ++db.seq, fecha: h, tipo: "ingreso", categoria: "Venta", monto: 2500, medio: "efectivo", comprobante: "interno", descripcion: "2 aguas" });
   // una rutina de ejemplo
   db.rutinas.push({ id: 1, socio_id: 1, nombre: "Día A – Pecho y tríceps", activa: true, ejercicios: [
-    { ejercicio: "Press banca", series: 4, repeticiones: "10", peso: "50 kg" },
-    { ejercicio: "Press inclinado mancuernas", series: 3, repeticiones: "12", peso: "18 kg" },
-    { ejercicio: "Fondos", series: 3, repeticiones: "al fallo", peso: "" },
-    { ejercicio: "Tríceps polea", series: 3, repeticiones: "12", peso: "25 kg" },
+    { ejercicio: "Press banca con barra", series: 4, repeticiones: "10", peso: "50 kg", ejercicio_ref: "Barbell_Bench_Press_-_Medium_Grip" },
+    { ejercicio: "Press inclinado con mancuernas", series: 3, repeticiones: "12", peso: "18 kg", ejercicio_ref: "Incline_Dumbbell_Press" },
+    { ejercicio: "Fondos para tríceps", series: 3, repeticiones: "al fallo", peso: "", ejercicio_ref: "Dips_-_Triceps_Version" },
+    { ejercicio: "Tríceps en polea", series: 3, repeticiones: "12", peso: "25 kg", ejercicio_ref: "Triceps_Pushdown" },
   ]});
   return db;
 }

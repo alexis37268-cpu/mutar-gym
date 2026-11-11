@@ -179,6 +179,52 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
 .ej-fila { display: grid; grid-template-columns: 1fr 3.5rem 4.5rem 4.5rem 2.2rem; gap: .35rem; }
 .ej-fila input { min-height: 40px; padding: .4rem; }
 
+
+/* ===== Ejercicios con foto ===== */
+.sin-foto { background: repeating-linear-gradient(45deg, #ECEEEA 0 6px, #E2E5DF 6px 12px); }
+.mini-ejs { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.mini-ejs li { display: flex; align-items: center; gap: .65rem; font-size: .95rem; }
+.mini-ejs small { color: var(--goma); }
+img.mini, span.mini { width: 52px; height: 52px; flex: none; border-radius: 8px; object-fit: cover; background: var(--blanco); border: 1px solid var(--linea); display: block; }
+
+.ej-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.ej-item { display: grid; grid-template-columns: 76px 1fr auto; gap: .6rem; align-items: center;
+  background: var(--blanco); border: 1px solid var(--linea); border-radius: 10px; padding: .5rem; }
+img.ej-foto, span.ej-foto { width: 76px; height: 76px; border-radius: 8px; object-fit: cover; display: block; }
+.ej-datos { display: grid; gap: .35rem; min-width: 0; }
+.ej-datos input { min-height: 38px; padding: .35rem .5rem; }
+.ej-nums { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: .35rem; }
+.ej-mover { display: grid; gap: .3rem; }
+
+.grilla-ej { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; }
+.tarjeta-ej { display: grid; gap: .25rem; padding: .4rem; text-align: left; cursor: pointer;
+  background: var(--blanco); border: 1px solid var(--linea); border-radius: 10px; font: inherit; color: inherit; }
+.tarjeta-ej img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 7px; background: #ECEEEA; }
+.tarjeta-ej .nombre { font-weight: 600; font-size: .9rem; line-height: 1.2; }
+.tarjeta-ej .sub { font-size: .8rem; color: var(--goma); }
+.tarjeta-ej.sumado { outline: 3px solid var(--marca); outline-offset: -3px; }
+@media (min-width: 1000px) { dialog:has(.grilla-ej) { width: 760px; } }
+
+/* ===== Hoja impresa ===== */
+#impresion { display: none; }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { padding: 0 !important; background: #fff; }
+  body > *:not(#impresion) { display: none !important; }
+  #impresion { display: block; color: #000; font-family: var(--texto); }
+  .imp-cab { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #01BC60; padding-bottom: 8px; margin-bottom: 10px; }
+  .imp-cab img { width: 64px; height: 64px; }
+  .imp-cab h1 { font-size: 22pt; }
+  .imp-cab p { font-size: 10pt; color: #444; }
+  .imp-rutina { margin-bottom: 8mm; }
+  .imp-rutina h2 { font-size: 15pt; margin: 4mm 0 3mm; break-after: avoid; }
+  .imp-grilla { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .imp-ej { break-inside: avoid; border: 1px solid #bbb; border-radius: 3mm; padding: 2mm; display: grid; gap: 1mm; font-size: 10pt; }
+  .imp-ej img, .imp-sin-foto { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 2mm; }
+  .imp-sin-foto { background: #eee; }
+  .imp-ej span { font-family: var(--titulos); font-size: 14pt; font-weight: 700; }
+}
+
 /* Avisos */
 #aviso {
   position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%);
