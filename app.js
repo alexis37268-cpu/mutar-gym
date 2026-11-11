@@ -298,10 +298,19 @@ async function formPago(s) {
 
 // ---------- catálogo de ejercicios (archivos fijos de la web) ----------
 let CATALOGO = null, POR_ID = {};
-async function catalogo() {
-  if (!CATALOGO) {
-    CATALOGO = await fetch("ejercicios/catalogo.json").then(r => r.json());
-    CATALOGO.forEach(e => { POR_ID[e.id] = e; });
+// Catálogo de la web + los nombres/ocultos que cambió el gimnasio (guardados en la base)
+async function catalogo(recargar = false) {
+  if (!CATALOGO || recargar) {
+    const [base, pers] = await Promise.all([
+      CATALOGO && !recargar ? CATALOGO : fetch("ejercicios/catalogo.json").then(r => r.json()),
+      datos.ejerciciosPersonalizados().catch(() => []),
+    ]);
+    const mapa = Object.fromEntries(pers.map(p => [p.ref, p]));
+    CATALOGO = base.map(e => {
+      const p = mapa[refDe(e)];
+      return { ...e, original: e.original || e.n, n: p?.nombre || e.original || e.n, oculto: !!p?.oculto, propio: !!p?.nombre };
+    });
+    POR_ID = {}; CATALOGO.forEach(e => { POR_ID[e.id] = e; });
   }
   return CATALOGO;
 }
@@ -384,8 +393,8 @@ async function formRutina(r, s) {
 // Grilla de fotos para elegir ejercicios (se pueden tocar varios seguidos)
 async function elegirEjercicios(r, s, ejs, nombreRutina) {
   const cat = await catalogo();
-  const grupos = ["Todos", ...new Set(cat.map(e => e.g))];
-  let grupo = "Todos";
+  const grupos = ["Todos", ...new Set(cat.map(e => e.g)), "Ocultos"];
+  let grupo = elegirEjercicios.grupo || "Todos";
   abrir(`
     <div class="dlg-cab"><h2>Elegir ejercicios</h2>
       <button class="btn primario chico cerrar" id="listo" type="button">Listo (<span id="cuenta">0</span>)</button></div>
@@ -398,31 +407,72 @@ async function elegirEjercicios(r, s, ejs, nombreRutina) {
   const norm = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const pintar = () => {
     const q = norm($("#q").value.trim());
-    const res = cat.filter(e => (grupo === "Todos" || e.g === grupo) &&
-      (!q || norm(`${e.n} ${e.en} ${e.m.join(" ")} ${e.e}`).includes(q)))
+    const res = cat.filter(e => (grupo === "Ocultos" ? e.oculto : !e.oculto && (grupo === "Todos" || e.g === grupo)) &&
+      (!q || norm(`${e.n} ${e.original} ${e.en} ${e.m.join(" ")} ${e.e}`).includes(q)))
       // primero los que EMPIEZAN con lo buscado, después los que lo tienen en el nombre, después el resto
       .map(e => [e, !q ? 0 : norm(e.n).startsWith(q) ? 0 : norm(e.n).includes(q) ? 1 : norm(e.en).includes(q) ? 2 : 3])
       .sort((a, b) => a[1] - b[1] || (b[0].p || 0) - (a[0].p || 0)).map(x => x[0]).slice(0, 120);
     $("#grilla").innerHTML = res.length ? res.map(e => `
-      <button type="button" class="tarjeta-ej" data-id="${esc(e.id)}">
+      <div class="tarjeta-ej" data-id="${esc(e.id)}" role="button" tabindex="0" aria-label="Agregar ${esc(e.n)}">
+        <button type="button" class="editar-ej" data-editar="${esc(e.id)}" aria-label="Cambiar nombre de ${esc(e.n)}">✎</button>
         <span class="par">${dibujoEj(refDe(e))}</span>
         <span class="nombre">${esc(e.n)}</span>
         <span class="sub">${esc(e.e)}${e.t === "f" ? ` · <span class="marca-foto">foto</span>` : ""}</span>
-      </button>`).join("") : `<p class="vacio">No hay ejercicios con esa búsqueda.</p>`;
+      </div>`).join("") : `<p class="vacio">${grupo === "Ocultos" ? "No hay ejercicios ocultos." : "No hay ejercicios con esa búsqueda."}</p>`;
   };
   $("#q").addEventListener("input", pintar);
   dlgCuerpo.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
-    grupo = b.dataset.g; dlgCuerpo.querySelectorAll("[data-g]").forEach(x => x.setAttribute("aria-pressed", x === b)); pintar();
+    grupo = elegirEjercicios.grupo = b.dataset.g; dlgCuerpo.querySelectorAll("[data-g]").forEach(x => x.setAttribute("aria-pressed", x === b)); pintar();
   });
-  $("#grilla").addEventListener("click", e => {
-    const t = e.target.closest("[data-id]"); if (!t) return;
+  const agregar = t => {
     const ej = POR_ID[t.dataset.id];
     ejs.push({ ejercicio: ej.n, series: 3, repeticiones: "12", peso: "", ejercicio_ref: refDe(ej) });
     sumados++; $("#cuenta").textContent = sumados;
     t.classList.add("sumado"); setTimeout(() => t.classList.remove("sumado"), 600);
+  };
+  $("#grilla").addEventListener("click", e => {
+    const ed = e.target.closest("[data-editar]");
+    if (ed) return editarEjercicio(POR_ID[ed.dataset.editar], () => elegirEjercicios(r, s, ejs, nombreRutina));
+    const t = e.target.closest("[data-id]"); if (t) agregar(t);
+  });
+  $("#grilla").addEventListener("keydown", e => {
+    const t = e.target.closest(".tarjeta-ej");
+    if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); agregar(t); }
   });
   $("#listo").onclick = () => formRutina({ ...r, nombre: nombreRutina, ejercicios: ejs }, s);
   pintar();
+}
+
+// Renombrar u ocultar un ejercicio del catálogo (para todo el gimnasio)
+function editarEjercicio(e, volver) {
+  const ref = refDe(e);
+  abrir(`
+    <div class="dlg-cab"><h2>Ejercicio del catálogo</h2>
+      <button class="btn chico cerrar" type="button" id="volver">Volver</button></div>
+    <span class="par grande">${dibujoEj(ref)}</span>
+    <form id="fe">
+      <div class="campo"><label for="en">Nombre en el gimnasio</label>
+        <input id="en" value="${esc(e.n)}" required>
+        <span class="ayuda">Nombre original: ${esc(e.original)}${e.en !== e.original ? ` (${esc(e.en)})` : ""}. El cambio vale para todo el gimnasio; las rutinas ya armadas no cambian.</span></div>
+      <label><input type="checkbox" id="eo" ${e.oculto ? "checked" : ""} style="width:auto;min-height:0"> Ocultar del catálogo (el dibujo no corresponde o no se usa)</label>
+      <div class="acciones">
+        <button class="btn primario">Guardar</button>
+        ${e.propio ? `<button type="button" class="btn" id="restaurar">Volver al nombre original</button>` : ""}
+      </div>
+    </form>`);
+  $("#volver").onclick = volver;
+  if (e.propio) $("#restaurar").onclick = async () => {
+    await datos.guardarEjercicioPersonalizado(ref, null, $("#eo").checked);
+    await catalogo(true); aviso("Nombre original restaurado"); volver();
+  };
+  $("#fe").onsubmit = async ev => {
+    ev.preventDefault();
+    const nombre = $("#en").value.trim();
+    try {
+      await datos.guardarEjercicioPersonalizado(ref, nombre === e.original ? null : nombre, $("#eo").checked);
+      await catalogo(true); aviso($("#eo").checked ? "Ejercicio ocultado" : "Nombre guardado"); volver();
+    } catch (err) { aviso(err.message); }
+  };
 }
 
 // ---------- impresión (impresora o "Guardar como PDF") ----------

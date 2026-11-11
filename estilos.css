@@ -201,11 +201,14 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
 .ej-mover { display: grid; gap: .3rem; }
 
 .grilla-ej { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; }
-.tarjeta-ej { display: grid; gap: .25rem; padding: .4rem; text-align: left; cursor: pointer;
+.tarjeta-ej { position: relative; display: grid; gap: .25rem; padding: .4rem; text-align: left; cursor: pointer;
   background: var(--blanco); border: 1px solid var(--linea); border-radius: 10px; font: inherit; color: inherit; }
 .tarjeta-ej .par { width: 100%; height: 96px; border-radius: 7px; padding: 4px; }
 .tarjeta-ej .nombre { font-weight: 600; font-size: .9rem; line-height: 1.2; }
 .tarjeta-ej .sub { font-size: .8rem; color: var(--goma); }
+.editar-ej { position: absolute; top: 4px; right: 4px; z-index: 1; width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--linea); background: var(--blanco); font-size: 1rem; cursor: pointer; color: var(--grafito); }
+.par.grande { width: 100%; height: 180px; border: 1px solid var(--linea); border-radius: 10px; padding: 6px; }
 .tarjeta-ej.sumado { outline: 3px solid var(--marca); outline-offset: -3px; }
 @media (min-width: 1000px) { dialog:has(.grilla-ej) { width: 760px; } }
 

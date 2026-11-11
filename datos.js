@@ -174,6 +174,11 @@ const demo = {
   },
   async borrarRutina(id) { cambiar(db => { db.rutinas = db.rutinas.filter(x => x.id !== id); }); },
 
+  async ejerciciosPersonalizados() { return Object.values(leer().ej_pers || {}); },
+  async guardarEjercicioPersonalizado(ref, nombre, oculto) {
+    cambiar(db => { db.ej_pers = db.ej_pers || {}; db.ej_pers[ref] = { ref, nombre: nombre || null, oculto: !!oculto }; });
+  },
+
   async exportar() { return leer(); },
 };
 
@@ -283,9 +288,18 @@ const nube = {
   },
   async borrarRutina(id) { const c = await cliente(); ok(await c.from("rutinas").delete().eq("id", id)); },
 
+  async ejerciciosPersonalizados() {
+    const c = await cliente();
+    return ok(await c.from("ejercicios_personalizados").select("ref, nombre, oculto"));
+  },
+  async guardarEjercicioPersonalizado(ref, nombre, oculto) {
+    const c = await cliente();
+    ok(await c.from("ejercicios_personalizados").upsert({ ref, nombre: nombre || null, oculto: !!oculto }));
+  },
+
   async exportar() {
     const c = await cliente(); const out = { exportado: new Date().toISOString() };
-    for (const t of ["config_gimnasio", "config_tecnica", "planes", "socios", "pagos", "caja", "rutinas", "rutina_ejercicios", "accesos"])
+    for (const t of ["config_gimnasio", "config_tecnica", "planes", "socios", "pagos", "caja", "rutinas", "rutina_ejercicios", "accesos", "ejercicios_personalizados"])
       out[t] = ok(await c.from(t).select("*"));
     return out;
   },
