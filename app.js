@@ -2,7 +2,7 @@
 // APP: pantallas y navegación
 // Cada pestaña es una función que dibuja su contenido en <main>.
 // =====================================================================
-import { datos, MODO, hoy, sumarDias, diasEntre, estadoSocio } from "./datos.js";
+import { datos, MODO, hoy, sumarDias, diasEntre, estadoSocio, sha256hex, prepararDemo } from "./datos.js";
 
 const $ = (sel, raiz = document) => raiz.querySelector(sel);
 const vista = $("#vista");
@@ -46,6 +46,28 @@ function textoVence(s) {
   return `Vence el ${fechaCorta(s.vence_el)}`;
 }
 
+// ---------- PIN = últimos números del DNI ----------
+// Prueba con los últimos 4; si otro socio ya lo tiene, 5; si no, 6.
+async function pinAutomatico(dni, socios, idActual) {
+  const num = (dni || "").replace(/\D/g, "");
+  for (const n of [4, 5, 6]) {
+    if (num.length < n) break;
+    const cand = num.slice(-n);
+    const h = await sha256hex(cand);
+    if (!socios.some(x => x.pin_hash === h && x.id !== idActual)) return cand;
+  }
+  return null;
+}
+// La base guarda solo la huella del PIN: para mostrarlo se prueba con los finales del DNI
+async function textoPin(s) {
+  if (!s.pin_hash) return "Sin PIN";
+  const num = (s.dni || "").replace(/\D/g, "");
+  for (const n of [4, 5, 6]) {
+    if (num.length >= n && await sha256hex(num.slice(-n)) === s.pin_hash) return `${num.slice(-n)} (últimos ${n} del DNI)`;
+  }
+  return "PIN propio (elegido a mano)";
+}
+
 // Link de WhatsApp con el mensaje armado (wa.me)
 function linkWhatsapp(s) {
   const tel = (s.telefono || "").replace(/\D/g, "");
@@ -81,7 +103,8 @@ async function vistaHoy() {
 
   vista.innerHTML = `
     <section class="seccion">
-      <h1>${esc(fecha.charAt(0).toUpperCase() + fecha.slice(1))}</h1>
+      <div class="seccion-cab"><h1>${esc(fecha.charAt(0).toUpperCase() + fecha.slice(1))}</h1>
+        <a class="btn primario" href="#entrada">Modo entrada</a></div>
       <p class="adentro"><strong>${adentro}</strong> ${adentro === 1 ? "persona entrenando ahora" : "personas entrenando ahora"} (estimado)</p>
       <div class="pesas">
         ${["vencido", "por_vencer", "al_dia"].map(e => `
@@ -178,6 +201,7 @@ async function fichaSocio(s) {
       <dt>Plan</dt><dd>${esc(s.plan_nombre || "Sin plan")}</dd>
       <dt>DNI</dt><dd>${esc(s.dni || "—")}</dd>
       <dt>Teléfono</dt><dd>${esc(s.telefono || "—")}</dd>
+      <dt>PIN</dt><dd id="pin-txt">…</dd>
       <dt>Tarjeta</dt><dd>${s.nfc_uid ? esc(s.nfc_uid) : "Sin tarjeta"}</dd>
       <dt>Apto médico</dt><dd>${s.apto_medico_vence ? "Vence " + fechaCorta(s.apto_medico_vence) : "No cargado"}</dd>
       ${s.notas ? `<dt>Notas</dt><dd>${esc(s.notas)}</dd>` : ""}
@@ -198,6 +222,7 @@ async function fichaSocio(s) {
           </ul>
         </div>`).join("") : `<p class="vacio">Sin rutina cargada.</p>`}
     </section>`);
+  textoPin(s).then(t => { const d = $("#pin-txt"); if (d) d.textContent = t; });
   $("#cobrar").onclick = () => formPago(s);
   $("#editar").onclick = () => formSocio(s);
   $("#nueva-rutina").onclick = () => formRutina({ socio_id: s.id, nombre: "", ejercicios: [] }, s);
@@ -227,8 +252,8 @@ async function formSocio(s = { activo: true }) {
       <div class="dos">
         <div class="campo"><label for="nfc">Tarjeta NFC</label><input id="nfc" value="${esc(s.nfc_uid)}" placeholder="04A1B2C3">
           <span class="ayuda">Código que muestra el lector al pasar el llavero.</span></div>
-        <div class="campo"><label for="pin">PIN de entrada</label><input id="pin" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="${s.id ? "Sin cambios" : "4 a 6 números"}">
-          <span class="ayuda">Para entrar sin tarjeta.</span></div>
+        <div class="campo"><label for="pin">PIN de entrada</label><input id="pin" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="${s.id ? "Sin cambios" : "Automático"}">
+          <span class="ayuda">${s.id ? "Vacío = queda el que tiene." : "Vacío = últimos 4 números del DNI."}</span></div>
       </div>
       <div class="dos">
         <div class="campo"><label for="apto">Apto médico vence</label><input id="apto" type="date" value="${esc(s.apto_medico_vence)}"></div>
@@ -250,8 +275,14 @@ async function formSocio(s = { activo: true }) {
       notas: $("#notas").value.trim(), activo: s.id ? $("#activo").checked : true,
     };
     try {
-      await datos.guardarSocio(nuevo, $("#pin").value.trim());
-      cerrar(); aviso(s.id ? "Cambios guardados" : "Socio guardado"); render();
+      let pin = $("#pin").value.trim();
+      let auto = false;
+      if (!pin && nuevo.dni && !s.pin_hash) {   // socio nuevo o sin PIN: se genera con el DNI
+        pin = await pinAutomatico(nuevo.dni, await datos.socios(), s.id);
+        auto = !!pin;
+      }
+      await datos.guardarSocio(nuevo, pin);
+      cerrar(); aviso((s.id ? "Cambios guardados" : "Socio guardado") + (auto ? ` · PIN ${pin}` : "")); render();
     } catch (err) { aviso(err.message); }
   };
 }
@@ -758,6 +789,70 @@ function formPlan(p = { activo: true, duracion_dias: 30 }) {
 }
 
 // =====================================================================
+// MODO ENTRADA (recepción): el socio escribe su PIN y Enter
+// =====================================================================
+let sonido = null;
+function pitido(ok) {
+  try {
+    sonido ||= new (window.AudioContext || window.webkitAudioContext)();
+    const tonos = ok ? [[1320, 0, .12]] : [[330, 0, .18], [330, .25, .18]];
+    tonos.forEach(([f, t, d]) => {
+      const o = sonido.createOscillator(), g = sonido.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(sonido.destination);
+      g.gain.setValueAtTime(.25, sonido.currentTime + t);
+      o.start(sonido.currentTime + t); o.stop(sonido.currentTime + t + d);
+    });
+  } catch {}
+}
+
+function vistaEntrada() {
+  vista.innerHTML = `
+    <section class="kiosco">
+      <a class="btn chico kiosco-salir" href="#hoy">Salir</a>
+      <img class="kiosco-logo" src="${esc(CFG.gym.logo_url || "logo-512.png")}" alt="">
+      <div id="k-estado" class="kiosco-estado">
+        <h1>Bienvenido a ${esc(CFG.gym.nombre)}</h1>
+        <p>Ingresá tu PIN y apretá Enter</p>
+      </div>
+      <form id="k-form" autocomplete="off">
+        <input id="k-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" aria-label="PIN" autofocus>
+        <button class="btn primario">Entrar</button>
+      </form>
+    </section>`;
+  const inp = $("#k-pin"), est = $("#k-estado");
+  const enfocar = () => inp.focus();
+  enfocar();
+  vista.onclick = e => { if (!e.target.closest("a")) enfocar(); };
+  let t = null;
+  const reposo = () => {
+    est.className = "kiosco-estado";
+    est.innerHTML = `<h1>Bienvenido a ${esc(CFG.gym.nombre)}</h1><p>Ingresá tu PIN y apretá Enter</p>`;
+  };
+  $("#k-form").onsubmit = async e => {
+    e.preventDefault();
+    const pin = inp.value.trim(); inp.value = "";
+    if (!/^\d{4,6}$/.test(pin)) { est.className = "kiosco-estado no"; est.innerHTML = "<h1>PIN inválido</h1><p>Son 4 a 6 números</p>"; pitido(false); }
+    else {
+      try {
+        const r = await datos.validarRecepcion(await sha256hex(pin));
+        const ok = r.resultado === "ok";
+        const msj = {
+          ok: [`¡Hola ${r.nombre}!`, `Cuota al día hasta el ${fechaCorta(r.vence)}`],
+          vencido: [`${r.nombre}: cuota vencida`, `Venció el ${fechaCorta(r.vence)} · pasá por recepción`],
+          limite_semanal: [`${r.nombre}: ya usaste tus días`, "de esta semana"],
+          inactivo: [`${r.nombre}: socio inactivo`, "Consultá en recepción"],
+          desconocido: ["PIN no registrado", "Revisá el número o consultá en recepción"],
+        }[r.resultado] || ["Error", ""];
+        est.className = "kiosco-estado " + (ok ? "si" : "no");
+        est.innerHTML = `<h1>${esc(msj[0])}</h1><p>${esc(msj[1])}</p>`;
+        pitido(ok);
+      } catch (err) { est.className = "kiosco-estado no"; est.innerHTML = `<h1>Sin conexión</h1><p>${esc(err.message)}</p>`; pitido(false); }
+    }
+    clearTimeout(t); t = setTimeout(reposo, 3500); enfocar();
+  };
+}
+
+// =====================================================================
 // LOGIN (solo en modo nube)
 // =====================================================================
 function vistaLogin() {
@@ -781,13 +876,16 @@ function vistaLogin() {
 // =====================================================================
 // NAVEGACIÓN
 // =====================================================================
-const VISTAS = { hoy: vistaHoy, socios: vistaSocios, caja: vistaCaja, ajustes: vistaAjustes };
+const VISTAS = { hoy: vistaHoy, socios: vistaSocios, caja: vistaCaja, ajustes: vistaAjustes, entrada: vistaEntrada };
 
 async function render() {
   const tab = (location.hash.slice(1) || "hoy");
   const fn = VISTAS[tab] || vistaHoy;
   document.querySelectorAll(".tabs a").forEach(a => a.dataset.tab === tab ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  if (dlg.open) dlg.close();   // al cambiar de pestaña no queda una ficha abierta encima
   vista.className = "";
+  vista.onclick = null;
+  document.body.classList.toggle("modo-kiosco", tab === "entrada");
   try { await fn(); } catch (err) { vista.innerHTML = `<p class="vacio">No se pudo cargar: ${esc(err.message)}. Revisá la conexión y volvé a intentar.</p>`; }
 }
 
@@ -795,6 +893,7 @@ window.addEventListener("hashchange", () => { render(); vista.focus(); });
 
 (async function iniciar() {
   if (MODO === "demo") $("#modo-demo").hidden = false;
+  await prepararDemo();
   SESION = await datos.sesion();
   if (!SESION) return vistaLogin();
   CFG = await datos.config();

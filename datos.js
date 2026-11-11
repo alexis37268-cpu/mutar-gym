@@ -22,6 +22,12 @@ export function diasEntre(desdeISO, hastaISO) {
   return Math.round((new Date(hastaISO + "T12:00:00Z") - new Date(desdeISO + "T12:00:00Z")) / 86400000);
 }
 
+// SHA-256 en hexa (igual que hace la base y el ESP): el PIN nunca se guarda en claro
+export async function sha256hex(txt) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Misma regla que la vista v_socios_estado de la base
 export function estadoSocio(s, diasAviso) {
   if (!s.activo) return "inactivo";
@@ -33,7 +39,7 @@ export function estadoSocio(s, diasAviso) {
 // =====================================================================
 // MODO PRUEBA: todo en localStorage del navegador
 // =====================================================================
-const CLAVE = "gimnasio-demo-v4";
+const CLAVE = "gimnasio-demo-v5";
 
 function semilla() {
   const h = hoy();
@@ -97,6 +103,14 @@ function leer() {
   try { const t = localStorage.getItem(CLAVE); if (t) return JSON.parse(t); } catch {}
   const db = semilla(); escribir(db); return db;
 }
+// Datos de prueba: a los socios de ejemplo se les pone PIN = últimos 4 del DNI
+export async function prepararDemo() {
+  if (MODO !== "demo") return;
+  const db = leer();
+  if (db.pins_listos) return;
+  for (const s of db.socios) if (s.dni && !s.pin_hash) s.pin_hash = await sha256hex(s.dni.slice(-4));
+  db.pins_listos = true; escribir(db);
+}
 function escribir(db) { try { localStorage.setItem(CLAVE, JSON.stringify(db)); } catch {} }
 function cambiar(fn) { const db = leer(); const r = fn(db); escribir(db); return r; }
 
@@ -122,13 +136,36 @@ const demo = {
     return db.socios.map(s => ({ ...s, plan_nombre: db.planes.find(p => p.id === s.plan_id)?.nombre ?? "" }));
   },
   async guardarSocio(s, pin) {
+    const pin_hash = pin ? await sha256hex(pin) : null;
     return cambiar(db => {
       const dup = (campo, val) => val && db.socios.some(x => x[campo] === val && x.id !== s.id);
       if (dup("dni", s.dni)) throw new Error("Ya hay un socio con ese DNI");
       if (dup("nfc_uid", s.nfc_uid)) throw new Error("Esa tarjeta ya está asignada a otro socio");
-      if (pin && db.socios.some(x => x.pin === pin && x.id !== s.id)) throw new Error("Ese PIN ya lo usa otro socio");
-      if (s.id) { Object.assign(db.socios.find(x => x.id === s.id), s, pin ? { pin } : {}); return s.id; }
-      const id = ++db.seq; db.socios.push({ ...s, id, pin: pin || "", activo: true, vence_el: null }); return id;
+      if (dup("pin_hash", pin_hash)) throw new Error("Ese PIN ya lo usa otro socio");
+      if (s.id) { Object.assign(db.socios.find(x => x.id === s.id), s, pin_hash ? { pin_hash } : {}); return s.id; }
+      const id = ++db.seq; db.socios.push({ ...s, id, pin_hash, activo: true, vence_el: null }); return id;
+    });
+  },
+
+  // Entrada desde la recepción (misma regla que _evaluar en la base)
+  async validarRecepcion(pinHash) {
+    return cambiar(db => {
+      const s = db.socios.find(x => x.pin_hash === pinHash);
+      const h = hoy();
+      let res = "desconocido";
+      if (s) {
+        const plan = db.planes.find(p => p.id === s.plan_id);
+        const gracia = db.config_tecnica.dias_gracia || 0;
+        const lunes = sumarDias(h, -((new Date(h + "T12:00:00Z").getUTCDay() + 6) % 7));
+        const diasSemana = new Set(db.accesos.filter(a => a.socio_id === s.id && a.resultado === "ok")
+          .map(a => a.fecha_hora.slice(0, 10)).filter(d => d >= lunes && d < h)).size;
+        res = !s.activo ? "inactivo"
+          : !s.vence_el || sumarDias(s.vence_el, gracia) < h ? "vencido"
+          : plan?.dias_por_semana && diasSemana >= plan.dias_por_semana ? "limite_semanal" : "ok";
+      }
+      const ahora = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).replace(" ", "T") + "-03:00";
+      db.accesos.push({ id: ++db.seq, socio_id: s?.id ?? null, metodo: "pin", resultado: res, fecha_hora: ahora });
+      return { resultado: res, nombre: s?.nombre ?? null, vence: s?.vence_el ?? null };
     });
   },
 
@@ -249,6 +286,10 @@ const nube = {
     return socioId;
   },
   async registrarPago(p) { const c = await cliente(); ok(await c.from("pagos").insert(p)); },
+  async validarRecepcion(pinHash) {
+    const c = await cliente();
+    return ok(await c.rpc("validar_recepcion", { p_metodo: "pin", p_credencial: pinHash }));
+  },
 
   async caja(mes) {
     const c = await cliente();

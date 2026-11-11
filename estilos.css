@@ -242,6 +242,23 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
   #impresion .imp-hoja:last-child { break-after: auto; }
 }
 
+
+/* ===== Modo entrada (recepción) ===== */
+body.modo-kiosco { padding: 0 !important; background: var(--negro); }
+body.modo-kiosco .barra, body.modo-kiosco .tabs { display: none; }
+body.modo-kiosco main { max-width: none; min-height: 100vh; padding: 0; }
+.kiosco { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 1.5rem; padding: 2rem; text-align: center; color: var(--blanco); position: relative; }
+.kiosco-salir { position: absolute; top: 1rem; right: 1rem; opacity: .6; }
+.kiosco-logo { width: min(34vh, 240px); height: auto; border-radius: 50%; }
+.kiosco-estado { min-height: 9rem; display: grid; align-content: center; gap: .4rem; padding: 1rem 2rem; border-radius: 16px; transition: background .2s; }
+.kiosco-estado h1 { font-size: clamp(2rem, 6vw, 3.6rem); }
+.kiosco-estado p { font-size: clamp(1.1rem, 2.6vw, 1.6rem); opacity: .85; }
+.kiosco-estado.si { background: var(--verde); }
+.kiosco-estado.no { background: var(--rojo); }
+#k-form { display: flex; gap: .6rem; }
+#k-pin { width: 12ch; text-align: center; font: 700 2.4rem var(--titulos); letter-spacing: .3em; min-height: 64px; }
+#k-form .btn { min-height: 64px; font-size: 1.3rem; background: var(--marca); border-color: var(--marca); }
+
 /* Avisos */
 #aviso {
   position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%);
