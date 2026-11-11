@@ -305,9 +305,12 @@ async function catalogo() {
   }
   return CATALOGO;
 }
+// Dibujo de líneas en dos posiciones (inicio y fin), uno al lado del otro
+const dibujoEj = ref => `<img src="ejercicios/img/${encodeURIComponent(ref)}-1.svg" alt="" loading="lazy"><img src="ejercicios/img/${encodeURIComponent(ref)}-2.svg" alt="" loading="lazy">`;
 const fotoEj = (ref, clase) => ref
-  ? `<img class="${clase}" src="ejercicios/img/${encodeURIComponent(ref)}.jpg" alt="" loading="lazy">`
+  ? `<span class="par ${clase}">${dibujoEj(ref)}</span>`
   : `<span class="${clase} sin-foto" aria-hidden="true"></span>`;
+const CREDITO = "Ilustraciones: Everkinetic (everkinetic.com), licencia CC BY-SA 4.0";
 const detalleEj = e => [e.series ? `${e.series} × ${e.repeticiones || "–"}` : e.repeticiones, e.peso].filter(Boolean).map(esc).join(" · ");
 
 async function formRutina(r, s) {
@@ -317,7 +320,7 @@ async function formRutina(r, s) {
     <div class="dlg-cab"><h2>Rutina de ${esc(s.nombre)}</h2>
       <button class="btn chico cerrar" data-cerrar type="button">Cancelar</button></div>
     <form id="f">
-      <div class="campo"><label for="rn">Nombre</label><input id="rn" required placeholder="Día A – Pecho y tríceps" value="${esc(r.nombre)}"></div>
+      <div class="campo"><label for="rn">Nombre</label><input id="rn" required placeholder="Día 1 – Bíceps y pecho" value="${esc(r.nombre)}"></div>
       <ul id="ejs" class="ej-lista"></ul>
       <div class="acciones">
         <button type="button" class="btn" id="elegir">Elegir del catálogo</button>
@@ -344,7 +347,7 @@ async function formRutina(r, s) {
           <button type="button" class="btn chico" data-subir aria-label="Subir">↑</button>
           <button type="button" class="btn chico" data-quitar aria-label="Quitar">×</button>
         </div>
-      </li>`).join("") : `<li class="vacio">Tocá «Elegir del catálogo» para sumar ejercicios con foto.</li>`;
+      </li>`).join("") : `<li class="vacio">Tocá «Elegir del catálogo» para sumar ejercicios con dibujo.</li>`;
   };
   lista.addEventListener("input", e => {
     const li = e.target.closest("[data-i]"); if (!li) return;
@@ -398,7 +401,7 @@ async function elegirEjercicios(r, s, ejs, nombreRutina) {
       .sort((a, b) => a[1] - b[1] || (b[0].p || 0) - (a[0].p || 0)).map(x => x[0]).slice(0, 120);
     $("#grilla").innerHTML = res.length ? res.map(e => `
       <button type="button" class="tarjeta-ej" data-id="${esc(e.id)}">
-        <img src="ejercicios/img/${encodeURIComponent(e.id)}.jpg" alt="" loading="lazy">
+        <span class="par">${dibujoEj(e.id)}</span>
         <span class="nombre">${esc(e.n)}</span>
         <span class="sub">${esc(e.e)}</span>
       </button>`).join("") : `<p class="vacio">No hay ejercicios con esa búsqueda.</p>`;
@@ -433,13 +436,14 @@ async function imprimirRutinas(s, rutinas) {
         <h2>${esc(r.nombre)}</h2>
         <div class="imp-grilla">${r.ejercicios.map((e, i) => `
           <div class="imp-ej">
-            ${e.ejercicio_ref ? `<img src="ejercicios/img/${encodeURIComponent(e.ejercicio_ref)}.jpg" alt="">` : `<div class="imp-sin-foto"></div>`}
+            ${e.ejercicio_ref ? `<div class="par">${dibujoEj(e.ejercicio_ref).replaceAll(' loading="lazy"', "")}</div>` : `<div class="imp-sin-foto"></div>`}
             <strong>${i + 1}. ${esc(e.ejercicio)}</strong>
             <span>${detalleEj(e) || "&nbsp;"}</span>
           </div>`).join("")}
         </div>
-      </section>`).join("")}`;
-  // esperar a que carguen las fotos antes de imprimir
+      </section>`).join("")}
+    <footer class="imp-pie">${CREDITO}</footer>`;
+  // esperar a que carguen los dibujos antes de imprimir
   await Promise.all([...hoja.querySelectorAll("img")].map(i => i.complete ? null : new Promise(ok => { i.onload = i.onerror = ok; })));
   if (window.Android && window.Android.imprimir) window.Android.imprimir();   // dentro de la APK
   else window.print();
@@ -594,6 +598,7 @@ async function vistaAjustes() {
     <section class="seccion">
       <h2>Respaldo</h2>
       <p class="ayuda">Descarga una copia de todos los datos. Guardala en el Drive o en un pendrive.</p>
+      <p class="ayuda">${CREDITO}.</p>
       <div class="acciones">
         <button class="btn" id="exportar">Descargar copia</button>
         ${MODO === "demo" ? `<button class="btn peligro" id="reiniciar">Volver a los datos de prueba</button>`

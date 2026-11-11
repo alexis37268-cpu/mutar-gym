@@ -1,7 +1,7 @@
 // Service worker: guarda los archivos de la app para que abra rápido
 // y se pueda instalar en el celular. Los DATOS no se guardan acá:
 // siempre se piden frescos a la base.
-const VERSION = "gym-v3";
+const VERSION = "gym-v4";
 const ARCHIVOS = ["./", "index.html", "estilos.css", "app.js", "datos.js", "config.js", "manifest.json", "logo-192.png", "logo-512.png"];
 
 self.addEventListener("install", e => {
