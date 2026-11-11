@@ -477,28 +477,69 @@ function editarEjercicio(e, volver) {
 
 // ---------- impresión (impresora o "Guardar como PDF") ----------
 async function imprimirRutinas(s, rutinas) {
+  await catalogo().catch(() => {});
   const fecha = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+  const ORDEN = ["Pecho", "Espalda", "Hombros", "Bíceps", "Tríceps", "Antebrazos", "Piernas", "Glúteos", "Gemelos", "Abdominales", "Otros"];
+  const grupoDe = e => (e.ejercicio_ref && POR_ID[e.ejercicio_ref.replace(/^f:/, "")]?.g) || "Otros";
+
+  // Calcula columnas y tamaño de dibujo para que TODA la rutina entre en una hoja A4
+  // (alto útil ≈ 273 mm: 297 menos márgenes; ~24 mm de encabezado, ~9 mm por título de grupo)
+  const medidas = (grupos, n) => {
+    // punto de partida; después se ajusta midiendo la hoja real
+    const cols = n <= 4 ? 2 : n <= 12 ? 3 : 4;
+    const img = n <= 4 ? 62 : n <= 8 ? 48 : 40;
+    const letra = { 2: 12, 3: 10.5, 4: 9.5 }[cols];
+    return `--cols:${cols};--img:${img.toFixed(1)}mm;--letra:${letra}pt`;
+  };
+
   let hoja = document.getElementById("impresion");
   if (!hoja) { hoja = document.createElement("div"); hoja.id = "impresion"; document.body.appendChild(hoja); }
-  hoja.innerHTML = `
-    <header class="imp-cab">
-      <img src="${esc(CFG.gym.logo_url || "logo-192.png")}" alt="">
-      <div><h1>${esc(s.nombre)} ${esc(s.apellido)}</h1><p>${esc(CFG.gym.nombre)} · ${fecha}</p></div>
-    </header>
-    ${rutinas.map(r => `
-      <section class="imp-rutina">
+  hoja.innerHTML = rutinas.map(r => {
+    const porGrupo = {};
+    r.ejercicios.forEach(e => { (porGrupo[grupoDe(e)] ||= []).push(e); });
+    const grupos = Object.entries(porGrupo).sort((a, b) => ORDEN.indexOf(a[0]) - ORDEN.indexOf(b[0]));
+    let i = 0;
+    return `
+    <section class="imp-hoja" style="${medidas(grupos, r.ejercicios.length)}">
+     <div class="imp-contenido">
+      <header class="imp-cab">
+        <img src="${esc(CFG.gym.logo_url || "logo-192.png")}" alt="">
+        <div><h1>${esc(s.nombre)} ${esc(s.apellido)}</h1><p>${esc(CFG.gym.nombre)} · ${fecha}</p></div>
         <h2>${esc(r.nombre)}</h2>
-        <div class="imp-grilla">${r.ejercicios.map((e, i) => `
-          <div class="imp-ej">
-            ${e.ejercicio_ref ? `<div class="par">${dibujoEj(e.ejercicio_ref).replaceAll(' loading="lazy"', "")}</div>` : `<div class="imp-sin-foto"></div>`}
-            <strong>${i + 1}. ${esc(e.ejercicio)}</strong>
-            <span>${detalleEj(e) || "&nbsp;"}</span>
-          </div>`).join("")}
-        </div>
-      </section>`).join("")}
-    <footer class="imp-pie">${CREDITO}</footer>`;
-  // esperar a que carguen los dibujos antes de imprimir
+      </header>
+      <div class="imp-flujo">${grupos.map(([g, lista]) => `
+        <h3 class="imp-grupo">${esc(g)}</h3>${lista.map(e => `
+        <div class="imp-ej">
+          ${e.ejercicio_ref ? `<div class="par">${dibujoEj(e.ejercicio_ref).replaceAll(' loading="lazy"', "")}</div>` : `<div class="imp-sin-foto"></div>`}
+          <strong>${++i}. ${esc(e.ejercicio)}</strong>
+          <span>${detalleEj(e) || "&nbsp;"}</span>
+        </div>`).join("")}`).join("")}
+      </div>
+     </div>
+      <footer class="imp-pie">${CREDITO}</footer>
+    </section>`;
+  }).join("");
+  // esperar a que carguen los dibujos antes de medir e imprimir
   await Promise.all([...hoja.querySelectorAll("img")].map(i => i.complete ? null : new Promise(ok => { i.onload = i.onerror = ok; })));
+
+  // Medir cada hoja fuera de pantalla y achicar hasta que entre en el A4.
+  // Primero se achican los dibujos; si llegan al mínimo, se suma una columna.
+  hoja.classList.add("midiendo");
+  const mm = 96 / 25.4;   // px por mm
+  for (const h of hoja.querySelectorAll(".imp-hoja")) {
+    let cols = Number(h.style.getPropertyValue("--cols"));
+    let img = parseFloat(h.style.getPropertyValue("--img"));
+    for (let k = 0; k < 80 && h.querySelector(".imp-contenido").scrollHeight > 262 * mm; k++) {
+      if (img > 20) img -= 2;
+      else if (cols < 5) { cols++; img = 30; h.style.setProperty("--letra", { 3: 10.5, 4: 9.5, 5: 8.5 }[cols] + "pt"); }
+      else if (img > 12) img -= 1;
+      else break;
+      h.style.setProperty("--cols", cols);
+      h.style.setProperty("--img", img + "mm");
+    }
+  }
+  hoja.classList.remove("midiendo");
+
   if (window.Android && window.Android.imprimir) window.Android.imprimir();   // dentro de la APK
   else window.print();
 }

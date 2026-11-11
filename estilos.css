@@ -212,27 +212,34 @@ dialog::backdrop { background: rgba(35,39,43,.55); }
 .tarjeta-ej.sumado { outline: 3px solid var(--marca); outline-offset: -3px; }
 @media (min-width: 1000px) { dialog:has(.grilla-ej) { width: 760px; } }
 
-/* ===== Hoja impresa ===== */
-#impresion { display: none; }
+/* ===== Hoja impresa: una rutina por hoja A4, agrupada por músculo =====
+   Los estilos de la hoja valen siempre; solo se MUESTRA al imprimir o mientras
+   la página la mide fuera de pantalla (.midiendo) para que entre en una hoja. */
+#impresion { display: none; color: #000; font-family: var(--texto); background: #fff; }
+#impresion.midiendo { display: block; position: absolute; left: -10000px; top: 0; width: 186mm; }
+#impresion .imp-hoja { height: 271mm; overflow: hidden; display: flex; flex-direction: column; }
+#impresion .imp-contenido { flex: none; }
+#impresion .imp-cab { display: flex; align-items: center; gap: 10px; border-bottom: 3px solid #01BC60; padding-bottom: 6px; margin-bottom: 2mm; }
+#impresion .imp-cab img { width: 52px; height: 52px; }
+#impresion .imp-cab h1 { font-size: 18pt; }
+#impresion .imp-cab p { font-size: 9pt; color: #444; }
+#impresion .imp-cab h2 { margin-left: auto; font-size: 15pt; text-align: right; max-width: 50%; }
+#impresion .imp-flujo { column-count: var(--cols); column-gap: 3mm; }
+#impresion .imp-grupo { font-size: 12pt; margin: 0 0 1.5mm; padding: 1mm 0 0 2mm; border-left: 4px solid #01BC60; break-after: avoid; break-inside: avoid; }
+#impresion .imp-ej { border: 1px solid #bbb; border-radius: 2.5mm; padding: 1.8mm; margin-bottom: 2.5mm; display: grid; gap: .8mm;
+  font-size: var(--letra); line-height: 1.2; break-inside: avoid; }
+#impresion .imp-ej .par, #impresion .imp-sin-foto { width: 100%; height: var(--img); }
+#impresion .imp-sin-foto { background: #f2f2f2; border-radius: 2mm; }
+#impresion .imp-ej img.foto { filter: grayscale(1) contrast(1.1) brightness(1.08); object-fit: contain; }
+#impresion .imp-ej span { font-family: var(--titulos); font-size: calc(var(--letra) * 1.35); font-weight: 700; }
+#impresion .imp-pie { margin-top: auto; font-size: 6.5pt; color: #666; }
 @media print {
   @page { size: A4; margin: 12mm; }
   body { padding: 0 !important; background: #fff; }
   body > *:not(#impresion) { display: none !important; }
-  #impresion { display: block; color: #000; font-family: var(--texto); }
-  .imp-cab { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #01BC60; padding-bottom: 8px; margin-bottom: 10px; }
-  .imp-cab img { width: 64px; height: 64px; }
-  .imp-cab h1 { font-size: 22pt; }
-  .imp-cab p { font-size: 10pt; color: #444; }
-  .imp-rutina { margin-bottom: 8mm; }
-  .imp-rutina h2 { font-size: 15pt; margin: 4mm 0 3mm; break-after: avoid; }
-  .imp-grilla { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4mm; }
-  .imp-ej { break-inside: avoid; border: 1px solid #bbb; border-radius: 3mm; padding: 3mm; display: grid; gap: 1.5mm; font-size: 12pt; }
-  .imp-ej .par { width: 100%; height: 62mm; }
-  .imp-sin-foto { width: 100%; height: 62mm; border-radius: 2mm; }
-  .imp-ej img.foto { filter: grayscale(1) contrast(1.1) brightness(1.08); object-fit: contain; }
-  .imp-pie { margin-top: 6mm; font-size: 7pt; color: #666; }
-  .imp-sin-foto { background: #eee; }
-  .imp-ej span { font-family: var(--titulos); font-size: 16pt; font-weight: 700; }
+  #impresion { display: block; }
+  #impresion .imp-hoja { break-after: page; }
+  #impresion .imp-hoja:last-child { break-after: auto; }
 }
 
 /* Avisos */
