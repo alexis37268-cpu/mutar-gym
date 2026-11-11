@@ -1,0 +1,13 @@
+{
+  "name": "Mutar Gym – Administración",
+  "short_name": "Mutar Gym",
+  "start_url": "./#hoy",
+  "display": "standalone",
+  "background_color": "#F3F4F1",
+  "theme_color": "#151617",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
