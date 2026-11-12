@@ -1,8 +1,8 @@
 // Service worker: guarda los archivos de la app para que abra rápido
 // y se pueda instalar en el celular. Los DATOS no se guardan acá:
 // siempre se piden frescos a la base.
-const VERSION = "gym-v9";
-const ARCHIVOS = ["./", "index.html", "estilos.css", "app.js", "datos.js", "config.js", "manifest.json", "logo-192.png", "logo-512.png"];
+const VERSION = "gym-v10";
+const ARCHIVOS = ["./", "index.html", "estilos.css", "app.js", "datos.js", "config.js", "qrcode.mjs", "manifest.json", "logo-192.png", "logo-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)));

@@ -39,7 +39,7 @@ export function estadoSocio(s, diasAviso) {
 // =====================================================================
 // MODO PRUEBA: todo en localStorage del navegador
 // =====================================================================
-const CLAVE = "gimnasio-demo-v5";
+const CLAVE = "gimnasio-demo-v6";
 
 function semilla() {
   const h = hoy();
@@ -59,7 +59,7 @@ function semilla() {
     },
     config_tecnica: { facturacion_arca: false, rele_habilitado: false, rele_tiempo_ms: 3000, dias_gracia: 0 },
     planes: [
-      { id: 1, nombre: "Mensual libre", precio: 25000, duracion_dias: 30, dias_por_semana: null, activo: true },
+      { id: 1, nombre: "Mensual libre", precio: 25000, duracion_dias: 30, dias_por_semana: null, activo: true, link_pago: "https://mpago.la/ejemplo-mutar" },
       { id: 2, nombre: "3 veces por semana", precio: 18000, duracion_dias: 30, dias_por_semana: 3, activo: true },
       { id: 3, nombre: "Pase diario", precio: 3000, duracion_dias: 1, dias_por_semana: null, activo: true },
     ],
@@ -165,7 +165,9 @@ const demo = {
       }
       const ahora = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).replace(" ", "T") + "-03:00";
       db.accesos.push({ id: ++db.seq, socio_id: s?.id ?? null, metodo: "pin", resultado: res, fecha_hora: ahora });
-      return { resultado: res, nombre: s?.nombre ?? null, vence: s?.vence_el ?? null };
+      const plan = s && db.planes.find(p => p.id === s.plan_id);
+      return { resultado: res, nombre: s?.nombre ?? null, vence: s?.vence_el ?? null, plan: plan?.nombre ?? null,
+        link_pago: ["vencido", "limite_semanal"].includes(res) ? plan?.link_pago || null : null };
     });
   },
 
@@ -211,6 +213,12 @@ const demo = {
   },
   async borrarRutina(id) { cambiar(db => { db.rutinas = db.rutinas.filter(x => x.id !== id); }); },
 
+  async ultimoLlaveroNuevo() {
+    const desde = Date.now() - 10 * 60000;
+    const a = leer().accesos.filter(x => x.resultado === "desconocido" && x.metodo === "nfc" && x.credencial && new Date(x.fecha_hora).getTime() >= desde)
+      .sort((x, y) => y.fecha_hora.localeCompare(x.fecha_hora))[0];
+    return a ? { credencial: a.credencial, fecha_hora: a.fecha_hora } : null;
+  },
   async ejerciciosPersonalizados() { return Object.values(leer().ej_pers || {}); },
   async guardarEjercicioPersonalizado(ref, nombre, oculto) {
     cambiar(db => { db.ej_pers = db.ej_pers || {}; db.ej_pers[ref] = { ref, nombre: nombre || null, oculto: !!oculto }; });
@@ -329,6 +337,14 @@ const nube = {
   },
   async borrarRutina(id) { const c = await cliente(); ok(await c.from("rutinas").delete().eq("id", id)); },
 
+  // Último llavero desconocido que pasó por la puerta en los últimos 10 minutos
+  async ultimoLlaveroNuevo() {
+    const c = await cliente();
+    const desde = new Date(Date.now() - 10 * 60000).toISOString();
+    const r = ok(await c.from("accesos").select("credencial, fecha_hora").eq("resultado", "desconocido").eq("metodo", "nfc")
+      .not("credencial", "is", null).gte("fecha_hora", desde).order("fecha_hora", { ascending: false }).limit(1));
+    return r[0] || null;
+  },
   async ejerciciosPersonalizados() {
     const c = await cliente();
     return ok(await c.from("ejercicios_personalizados").select("ref, nombre, oculto"));

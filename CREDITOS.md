@@ -12,3 +12,7 @@ y se distribuyen bajo la misma licencia CC BY-SA 4.0.
 ## Fotos de ejercicios
 Las fotos de `ejercicios/fotos/` provienen de **free-exercise-db** (https://github.com/yuhonas/free-exercise-db),
 de dominio público (Unlicense). Se achicaron a 360 px.
+
+## Generador de códigos QR
+`qrcode.mjs`: QR Code Generator for JavaScript, (c) 2009 Kazuhiko Arase, licencia MIT
+(https://github.com/kazuhikoarase/qrcode-generator).

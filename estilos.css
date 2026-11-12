@@ -136,6 +136,7 @@ form { display: grid; gap: .9rem; }
 .campo { display: grid; gap: .3rem; }
 .campo label { font-weight: 600; font-size: .95rem; }
 .campo .ayuda { font-size: .85rem; color: var(--goma); }
+.campo .btn.chico { justify-self: start; }
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 input, select, textarea {
   width: 100%; min-height: 44px; padding: .55rem .7rem;
@@ -255,6 +256,10 @@ body.modo-kiosco main { max-width: none; min-height: 100vh; padding: 0; }
 .kiosco-estado p { font-size: clamp(1.1rem, 2.6vw, 1.6rem); opacity: .85; }
 .kiosco-estado.si { background: var(--verde); }
 .kiosco-estado.no { background: var(--rojo); }
+.kiosco-estado.con-qr { grid-template-columns: 1fr auto; gap: 2rem; align-items: center; text-align: left; max-width: 900px; }
+.kiosco-estado .qr { background: #fff; border-radius: 12px; padding: 8px; width: min(36vh, 280px); }
+.kiosco-estado .qr svg { display: block; width: 100%; height: auto; }
+.kiosco-estado .qr-ayuda { margin-top: .6rem; font-weight: 600; }
 #k-form { display: flex; gap: .6rem; }
 #k-pin { width: 12ch; text-align: center; font: 700 2.4rem var(--titulos); letter-spacing: .3em; min-height: 64px; }
 #k-form .btn { min-height: 64px; font-size: 1.3rem; background: var(--marca); border-color: var(--marca); }

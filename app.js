@@ -2,6 +2,7 @@
 // APP: pantallas y navegación
 // Cada pestaña es una función que dibuja su contenido en <main>.
 // =====================================================================
+import qrcode from "./qrcode.mjs";
 import { datos, MODO, hoy, sumarDias, diasEntre, estadoSocio, sha256hex, prepararDemo } from "./datos.js";
 
 const $ = (sel, raiz = document) => raiz.querySelector(sel);
@@ -202,7 +203,7 @@ async function fichaSocio(s) {
       <dt>DNI</dt><dd>${esc(s.dni || "—")}</dd>
       <dt>Teléfono</dt><dd>${esc(s.telefono || "—")}</dd>
       <dt>PIN</dt><dd id="pin-txt">…</dd>
-      <dt>Tarjeta</dt><dd>${s.nfc_uid ? esc(s.nfc_uid) : "Sin tarjeta"}</dd>
+      <dt>Llavero</dt><dd>${s.nfc_uid ? esc(s.nfc_uid) : "Sin llavero"}</dd>
       <dt>Apto médico</dt><dd>${s.apto_medico_vence ? "Vence " + fechaCorta(s.apto_medico_vence) : "No cargado"}</dd>
       ${s.notas ? `<dt>Notas</dt><dd>${esc(s.notas)}</dd>` : ""}
     </dl>
@@ -250,8 +251,9 @@ async function formSocio(s = { activo: true }) {
       <div class="campo"><label for="plan">Plan</label>
         <select id="plan">${planes.map(p => `<option value="${p.id}" ${p.id === s.plan_id ? "selected" : ""}>${esc(p.nombre)} – ${pesos(p.precio)}</option>`).join("")}</select></div>
       <div class="dos">
-        <div class="campo"><label for="nfc">Tarjeta NFC</label><input id="nfc" value="${esc(s.nfc_uid)}" placeholder="04A1B2C3">
-          <span class="ayuda">Código que muestra el lector al pasar el llavero.</span></div>
+        <div class="campo"><label for="nfc">Llavero NFC</label><input id="nfc" value="${esc(s.nfc_uid)}" placeholder="04A1B2C3">
+          <button type="button" class="btn chico" id="ultimo-llavero">Usar el último llavero pasado</button>
+          <span class="ayuda">Pasá el llavero nuevo por la puerta y tocá el botón.</span></div>
         <div class="campo"><label for="pin">PIN de entrada</label><input id="pin" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="${s.id ? "Sin cambios" : "Automático"}">
           <span class="ayuda">${s.id ? "Vacío = queda el que tiene." : "Vacío = últimos 4 números del DNI."}</span></div>
       </div>
@@ -263,6 +265,14 @@ async function formSocio(s = { activo: true }) {
       ${s.id ? `<label><input type="checkbox" id="activo" ${s.activo ? "checked" : ""} style="width:auto;min-height:0"> Socio activo</label>` : ""}
       <button class="btn primario">${s.id ? "Guardar cambios" : "Guardar socio"}</button>
     </form>`);
+  $("#ultimo-llavero").onclick = async () => {
+    try {
+      const u = await datos.ultimoLlaveroNuevo();
+      if (!u) return aviso("No pasó ningún llavero nuevo por la puerta en los últimos 10 minutos");
+      $("#nfc").value = u.credencial;
+      aviso(`Llavero ${u.credencial} cargado. Tocá Guardar para asignarlo.`);
+    } catch (err) { aviso(err.message); }
+  };
   $("#f").onsubmit = async e => {
     e.preventDefault();
     const tel = $("#telefono").value.trim();
@@ -702,7 +712,7 @@ async function vistaAjustes() {
       <ul class="lista">${planes.map(p => `
         <li><button class="fila" data-plan="${p.id}">
           <span class="info"><span class="nombre">${esc(p.nombre)}</span>${p.activo ? "" : " (no se ofrece)"}<br>
-            <span class="sub">${p.duracion_dias} días${p.dias_por_semana ? ` · ${p.dias_por_semana} por semana` : " · libre"}</span></span>
+            <span class="sub">${p.duracion_dias} días${p.dias_por_semana ? ` · ${p.dias_por_semana} por semana` : " · libre"} · ${p.link_pago ? "con link de pago" : "sin link de pago"}</span></span>
           <span class="monto">${pesos(p.precio)}</span>
         </button></li>`).join("")}</ul>
     </section>
@@ -775,15 +785,22 @@ function formPlan(p = { activo: true, duracion_dias: 30 }) {
         <div class="campo"><label for="pd">Dura (días)</label><input id="pd" type="number" min="1" required value="${esc(p.duracion_dias)}"></div>
       </div>
       <div class="campo"><label for="ps">Días por semana</label><input id="ps" type="number" min="1" max="7" value="${esc(p.dias_por_semana)}" placeholder="Vacío = libre"></div>
+      <div class="campo"><label for="pl">Link de pago</label><input id="pl" type="url" value="${esc(p.link_pago)}" placeholder="https://mpago.la/...">
+        <span class="ayuda">Link de Mercado Pago por el monto de este plan. Si la cuota está vencida, la puerta muestra un QR con este link.</span></div>
       ${p.id ? `<label><input type="checkbox" id="pa" ${p.activo ? "checked" : ""} style="width:auto;min-height:0"> Se ofrece a socios nuevos</label>` : ""}
       <button class="btn primario">Guardar plan</button>
     </form>`);
   $("#f").onsubmit = async e => {
     e.preventDefault();
     try {
-      await datos.guardarPlan({ id: p.id, nombre: $("#pn").value.trim(), precio: Number($("#pp").value), duracion_dias: Number($("#pd").value),
-        dias_por_semana: $("#ps").value ? Number($("#ps").value) : null, activo: p.id ? $("#pa").checked : true });
-      cerrar(); aviso("Plan guardado"); vistaAjustes();
+      const precio = Number($("#pp").value), link = $("#pl").value.trim() || null;
+      await datos.guardarPlan({ id: p.id, nombre: $("#pn").value.trim(), precio, duracion_dias: Number($("#pd").value),
+        dias_por_semana: $("#ps").value ? Number($("#ps").value) : null, activo: p.id ? $("#pa").checked : true, link_pago: link });
+      cerrar(); vistaAjustes();
+      // si cambió el precio y el link sigue siendo el mismo, el link cobra el monto viejo
+      if (p.id && p.precio != null && Number(p.precio) !== precio && link && link === (p.link_pago || null))
+        alert("Cambiaste el precio del plan. Acordate de crear un link de pago nuevo en Mercado Pago con el monto nuevo y pegarlo en el plan: el link actual cobra el precio anterior.");
+      else aviso("Plan guardado");
     } catch (err) { aviso(err.message); }
   };
 }
@@ -803,6 +820,12 @@ function pitido(ok) {
       o.start(sonido.currentTime + t); o.stop(sonido.currentTime + t + d);
     });
   } catch {}
+}
+
+// Código QR como SVG (librería qrcode-generator, licencia MIT)
+function qrSvg(texto) {
+  const q = qrcode(0, "M"); q.addData(texto); q.make();
+  return q.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
 }
 
 function vistaEntrada() {
@@ -838,17 +861,20 @@ function vistaEntrada() {
         const ok = r.resultado === "ok";
         const msj = {
           ok: [`¡Hola ${r.nombre}!`, `Cuota al día hasta el ${fechaCorta(r.vence)}`],
-          vencido: [`${r.nombre}: cuota vencida`, `Venció el ${fechaCorta(r.vence)} · pasá por recepción`],
+          vencido: [`${r.nombre}: cuota vencida`, `Venció el ${fechaCorta(r.vence)}${r.link_pago ? "" : " · pasá por recepción"}`],
           limite_semanal: [`${r.nombre}: ya usaste tus días`, "de esta semana"],
           inactivo: [`${r.nombre}: socio inactivo`, "Consultá en recepción"],
           desconocido: ["PIN no registrado", "Revisá el número o consultá en recepción"],
         }[r.resultado] || ["Error", ""];
-        est.className = "kiosco-estado " + (ok ? "si" : "no");
-        est.innerHTML = `<h1>${esc(msj[0])}</h1><p>${esc(msj[1])}</p>`;
+        est.className = "kiosco-estado " + (ok ? "si" : "no") + (r.link_pago ? " con-qr" : "");
+        est.innerHTML = `<div><h1>${esc(msj[0])}</h1><p>${esc(msj[1])}</p>
+          ${r.link_pago ? `<p class="qr-ayuda">Escaneá el código con el celular para pagar${r.plan ? ` tu ${esc(r.plan)}` : ""}</p>` : ""}</div>
+          ${r.link_pago ? `<div class="qr">${qrSvg(r.link_pago)}</div>` : ""}`;
         pitido(ok);
       } catch (err) { est.className = "kiosco-estado no"; est.innerHTML = `<h1>Sin conexión</h1><p>${esc(err.message)}</p>`; pitido(false); }
     }
-    clearTimeout(t); t = setTimeout(reposo, 3500); enfocar();
+    // con QR se deja más tiempo en pantalla para que lo puedan escanear
+    clearTimeout(t); t = setTimeout(reposo, est.classList.contains("con-qr") ? 20000 : 3500); enfocar();
   };
 }
 
